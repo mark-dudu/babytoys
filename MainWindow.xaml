@@ -1,0 +1,125 @@
+<Window x:Class="BabyToys.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="BabyToys 儿童模式"
+        Width="560"
+        Height="520"
+        MinWidth="520"
+        MinHeight="500"
+        WindowStartupLocation="CenterScreen"
+        Background="#F6F7F9">
+  <Grid Margin="28">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <StackPanel>
+      <TextBlock Text="儿童模式防误触"
+                 FontSize="28"
+                 FontWeight="SemiBold"
+                 Foreground="#20242A" />
+      <TextBlock Text="覆盖所有屏幕，屏蔽常规键鼠输入，超时后请求睡眠。"
+                 Margin="0,8,0,0"
+                 FontSize="14"
+                 Foreground="#5A6472" />
+    </StackPanel>
+
+    <Border Grid.Row="1"
+            Margin="0,26,0,22"
+            Padding="22"
+            Background="White"
+            BorderBrush="#DDE2EA"
+            BorderThickness="1"
+            CornerRadius="8">
+      <StackPanel>
+        <TextBlock Text="图片来源"
+                   FontSize="16"
+                   FontWeight="SemiBold"
+                   Foreground="#20242A" />
+        <StackPanel Margin="0,12,0,0">
+          <RadioButton x:Name="SystemWallpaperRadio"
+                       Content="系统壁纸（默认，10 秒后转为黑屏）"
+                       GroupName="ImageSource"
+                       IsChecked="True"
+                       Checked="ImageSource_Checked" />
+          <RadioButton x:Name="CustomImageRadio"
+                       Content="自定义图片"
+                       GroupName="ImageSource"
+                       Margin="0,8,0,0"
+                       Checked="ImageSource_Checked" />
+        </StackPanel>
+
+        <DockPanel Margin="0,12,0,0">
+          <Button x:Name="ChooseImageButton"
+                  Content="选择图片"
+                  Width="96"
+                  Height="32"
+                  DockPanel.Dock="Right"
+                  Click="ChooseImageButton_Click" />
+          <TextBox x:Name="CustomImagePathTextBox"
+                   Margin="0,0,10,0"
+                   Height="32"
+                   VerticalContentAlignment="Center"
+                   IsReadOnly="True" />
+        </DockPanel>
+
+        <Separator Margin="0,22,0,22" />
+
+        <TextBlock Text="时间限制"
+                   FontSize="16"
+                   FontWeight="SemiBold"
+                   Foreground="#20242A" />
+        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+          <TextBox x:Name="DurationTextBox"
+                   Width="80"
+                   Height="32"
+                   Text="5"
+                   VerticalContentAlignment="Center" />
+          <TextBlock Text="分钟"
+                     VerticalAlignment="Center"
+                     Margin="10,0,0,0"
+                     Foreground="#394150" />
+          <CheckBox x:Name="ShowCountdownCheckBox"
+                    Content="儿童模式中显示倒计时"
+                    Margin="28,0,0,0"
+                    VerticalAlignment="Center" />
+        </StackPanel>
+
+        <TextBlock Text="解锁方式：Ctrl + Alt + U 长按 3 秒。系统通道如 Ctrl + Alt + Del 和电源键仍可用于恢复。"
+                   TextWrapping="Wrap"
+                   Margin="0,22,0,0"
+                   Foreground="#5A6472" />
+      </StackPanel>
+    </Border>
+
+    <Grid Grid.Row="2">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+
+      <TextBlock x:Name="StatusTextBlock"
+                 VerticalAlignment="Center"
+                 Foreground="#5A6472"
+                 Text="准备就绪" />
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button x:Name="CancelCountdownButton"
+                Content="取消"
+                Width="92"
+                Height="40"
+                Margin="0,0,10,0"
+                Visibility="Collapsed"
+                Click="CancelCountdownButton_Click" />
+        <Button x:Name="StartButton"
+                Content="进入儿童模式"
+                Width="144"
+                Height="40"
+                FontWeight="SemiBold"
+                Click="StartButton_Click" />
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>
