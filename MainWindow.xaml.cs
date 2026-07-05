@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Threading;
 using BabyToys.Models;
 using BabyToys.Services;
@@ -25,6 +26,7 @@ public partial class MainWindow : Window
         _confirmTimer.Tick += ConfirmTimer_Tick;
 
         Loaded += (_, _) => LoadSettings();
+        PreviewKeyDown += MainWindow_PreviewKeyDown;
     }
 
     private void LoadSettings()
@@ -137,13 +139,22 @@ public partial class MainWindow : Window
         _confirmRemainingSeconds = 3;
         StartButton.IsEnabled = false;
         CancelCountdownButton.Visibility = Visibility.Visible;
-        StatusTextBlock.Text = "3 秒后进入儿童模式，可取消";
+        StatusTextBlock.Text = "3 秒后进入儿童模式，按 Esc 可取消";
         _confirmTimer.Start();
     }
 
     private void CancelCountdownButton_Click(object sender, RoutedEventArgs e)
     {
         CancelConfirmCountdown("已取消");
+    }
+
+    private void MainWindow_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && _confirmTimer.IsEnabled)
+        {
+            CancelConfirmCountdown("已取消");
+            e.Handled = true;
+        }
     }
 
     private void ConfirmTimer_Tick(object? sender, EventArgs e)
@@ -157,7 +168,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        StatusTextBlock.Text = $"{_confirmRemainingSeconds} 秒后进入儿童模式，可取消";
+        StatusTextBlock.Text = $"{_confirmRemainingSeconds} 秒后进入儿童模式，按 Esc 可取消";
     }
 
     private void CancelConfirmCountdown(string status)

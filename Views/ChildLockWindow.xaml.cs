@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
-using System.Runtime.InteropServices;
+using BabyToys.Services;
 using Drawing = System.Drawing;
 
 namespace BabyToys.Views;
@@ -31,7 +31,7 @@ public partial class ChildLockWindow : Window
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         var handle = new WindowInteropHelper(this).Handle;
-        SetWindowPos(handle, HwndTopmost, _bounds.Left, _bounds.Top, _bounds.Width, _bounds.Height, SwpShowWindow);
+        WindowPlacementService.PlaceTopmost(handle, _bounds);
     }
 
     public void FadeToBlack()
@@ -87,16 +87,4 @@ public partial class ChildLockWindow : Window
         }
     }
 
-    private static readonly IntPtr HwndTopmost = new(-1);
-    private const uint SwpShowWindow = 0x0040;
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool SetWindowPos(
-        IntPtr handle,
-        IntPtr insertAfter,
-        int x,
-        int y,
-        int cx,
-        int cy,
-        uint flags);
 }

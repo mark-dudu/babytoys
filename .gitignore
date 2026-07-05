@@ -1,6 +1,10 @@
 bin/
 obj/
 .vs/
+.tmp-build-artifacts/
+artifacts/
+publish/
+TestResults/
 *.user
 *.suo
 *.log
