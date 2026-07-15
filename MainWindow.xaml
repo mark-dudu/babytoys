@@ -165,18 +165,23 @@
                    Foreground="{StaticResource TextSecondaryBrush}" />
       </StackPanel>
 
-      <Border Grid.Column="1"
-              VerticalAlignment="Top"
-              Padding="10,6"
-              Background="#EEF2FF"
-              BorderBrush="#C7D2FE"
-              BorderThickness="1"
-              CornerRadius="6">
-        <TextBlock Text="v1.1"
-                   FontSize="12"
-                   FontWeight="SemiBold"
-                   Foreground="#3730A3" />
-      </Border>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+        <Button Content="诊断"
+                Height="30"
+                Padding="12,0"
+                Margin="0,0,10,0"
+                Click="DiagnosticsButton_Click" />
+        <Border Padding="10,6"
+                Background="#EEF2FF"
+                BorderBrush="#C7D2FE"
+                BorderThickness="1"
+                CornerRadius="6">
+          <TextBlock Text="v1.1"
+                     FontSize="12"
+                     FontWeight="SemiBold"
+                     Foreground="#3730A3" />
+        </Border>
+      </StackPanel>
     </Grid>
 
     <Border Grid.Row="1"

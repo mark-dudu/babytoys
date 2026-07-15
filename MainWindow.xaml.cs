@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using BabyToys.Models;
 using BabyToys.Services;
 using BabyToys.Sessions;
+using BabyToys.Views;
 using Microsoft.Win32;
 
 namespace BabyToys;
@@ -16,6 +17,7 @@ public partial class MainWindow : Window
     private readonly StartupService _startupService = new();
     private readonly GlobalHotKeyService _globalHotKeyService = new();
     private readonly TrayIconService _trayIconService = new();
+    private readonly SessionRecoveryService _recoveryService = new();
     private readonly DispatcherTimer _confirmTimer = new();
     private AppSettings _settings = new();
     private int _confirmRemainingSeconds;
@@ -38,8 +40,19 @@ public partial class MainWindow : Window
         Loaded += (_, _) =>
         {
             LoadSettings();
+            CheckPreviousSessionRecovery();
             UpdateGlobalHotKeyRegistration();
-            if (Environment.GetCommandLineArgs().Any(arg => arg.Equals("--minimized", StringComparison.OrdinalIgnoreCase)))
+            var minimizedLaunch = Environment.GetCommandLineArgs()
+                .Any(arg => arg.Equals("--minimized", StringComparison.OrdinalIgnoreCase));
+            if (minimizedLaunch && !_settings.StartWithWindows)
+            {
+                AppLogService.Current.Info("Ignoring stale minimized launch because startup is disabled.");
+                _allowClose = true;
+                Close();
+                return;
+            }
+
+            if (minimizedLaunch)
             {
                 Hide();
             }
@@ -58,6 +71,7 @@ public partial class MainWindow : Window
         ShowCountdownCheckBox.IsChecked = _settings.ShowCountdown;
         EnableGlobalHotKeyCheckBox.IsChecked = _settings.EnableGlobalHotKey;
         StartWithWindowsCheckBox.IsChecked = _settings.StartWithWindows;
+        ReconcileStartupRegistration();
         RefreshPresetList(_settings.SelectedPresetName);
         UpdateImageControls();
     }
@@ -74,7 +88,7 @@ public partial class MainWindow : Window
         _settings.ShowCountdown = ShowCountdownCheckBox.IsChecked == true;
         _settings.EnableGlobalHotKey = EnableGlobalHotKeyCheckBox.IsChecked == true;
         var startWithWindows = StartWithWindowsCheckBox.IsChecked == true;
-        if (startWithWindows != _settings.StartWithWindows && !_startupService.TrySetEnabled(startWithWindows))
+        if (startWithWindows != _startupService.IsEnabled() && !_startupService.TrySetEnabled(startWithWindows))
         {
             startWithWindows = _settings.StartWithWindows;
             StartWithWindowsCheckBox.IsChecked = startWithWindows;
@@ -84,6 +98,22 @@ public partial class MainWindow : Window
         _settings.StartWithWindows = startWithWindows;
         _settingsService.Save(_settings);
         UpdateGlobalHotKeyRegistration();
+    }
+
+    private void ReconcileStartupRegistration()
+    {
+        if (_settings.StartWithWindows == _startupService.IsEnabled())
+        {
+            return;
+        }
+
+        if (!_startupService.TrySetEnabled(_settings.StartWithWindows))
+        {
+            StatusTextBlock.Text = "开机自启状态与系统不一致，自动修复失败";
+            return;
+        }
+
+        AppLogService.Current.Info("Startup registration reconciled with saved settings.");
     }
 
     private double ReadDurationMinutes()
@@ -164,6 +194,32 @@ public partial class MainWindow : Window
     {
         SaveSettingsFromUi();
         BeginConfirmCountdown();
+    }
+
+    private void CheckPreviousSessionRecovery()
+    {
+        var marker = _recoveryService.ReadPreviousMarker();
+        if (marker is null)
+        {
+            return;
+        }
+
+        if (_recoveryService.IsMarkerProcessActive(marker))
+        {
+            AppLogService.Current.Info($"Another BabyToys process owns the active session marker. Process id: {marker.ProcessId}.");
+            StatusTextBlock.Text = "检测到另一个 BabyToys 实例正在运行儿童模式";
+            return;
+        }
+
+        AppLogService.Current.Error($"Previous child lock session ended unexpectedly. Started at {marker.StartedAt:O}.");
+        _recoveryService.Clear();
+        StatusTextBlock.Text = "检测到上次儿童模式异常结束，输入拦截已随旧进程释放；可打开诊断查看日志";
+    }
+
+    private void DiagnosticsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var window = new DiagnosticsWindow { Owner = this };
+        window.ShowDialog();
     }
 
     private void StartFromShortcut()
@@ -375,7 +431,6 @@ public partial class MainWindow : Window
             SaveSettingsFromUi();
             e.Cancel = true;
             Hide();
-            _trayIconService.ShowBalloon("BabyToys 仍在运行", "可从托盘打开或退出程序。");
             return;
         }
 

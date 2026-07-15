@@ -7,6 +7,20 @@ public sealed class StartupService
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "BabyToys";
 
+    public bool IsEnabled()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: false);
+            return key?.GetValue(ValueName) is string value && !string.IsNullOrWhiteSpace(value);
+        }
+        catch (Exception ex)
+        {
+            AppLogService.Current.Error("Failed to read startup registration.", ex);
+            return false;
+        }
+    }
+
     public bool TrySetEnabled(bool enabled)
     {
         try

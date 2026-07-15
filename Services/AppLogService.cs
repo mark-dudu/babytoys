@@ -14,6 +14,26 @@ public sealed class AppLogService
         Write("ERROR", text);
     }
 
+    public bool TryOpenLogsDirectory()
+    {
+        try
+        {
+            Directory.CreateDirectory(AppPaths.LogsDirectory);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"\"{AppPaths.LogsDirectory}\"",
+                UseShellExecute = true
+            });
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Error("Failed to open logs directory.", ex);
+            return false;
+        }
+    }
+
     private void Write(string level, string message)
     {
         try

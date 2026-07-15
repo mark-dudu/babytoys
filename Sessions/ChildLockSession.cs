@@ -13,10 +13,13 @@ public sealed class ChildLockSession : IDisposable
     private readonly InputHookService _inputHookService;
     private readonly WallpaperService _wallpaperService;
     private readonly PowerService _powerService;
+    private readonly SessionRecoveryService _recoveryService = new();
+    private readonly ForegroundAppService _foregroundAppService = new();
     private readonly List<ChildLockWindow> _windows = [];
     private readonly DispatcherTimer _imagePhaseTimer = new();
     private readonly DispatcherTimer _countdownTimer = new();
     private readonly DispatcherTimer _unlockHoldTimer = new();
+    private readonly DispatcherTimer _recoveryMonitorTimer = new();
     private DateTimeOffset _deadline;
     private bool _disposed;
     private bool _hasEnded;
@@ -44,12 +47,26 @@ public sealed class ChildLockSession : IDisposable
 
         _unlockHoldTimer.Interval = TimeSpan.FromSeconds(3);
         _unlockHoldTimer.Tick += (_, _) => Unlock();
+
+        _recoveryMonitorTimer.Interval = TimeSpan.FromMilliseconds(250);
+        _recoveryMonitorTimer.Tick += (_, _) => CheckEmergencyRecovery();
     }
 
     public bool Start(Window owner)
     {
         State = ChildLockState.Starting;
         AppLogService.Current.Info("Child lock session starting.");
+
+        if (_recoveryService.IsAnotherSessionActive())
+        {
+            System.Windows.MessageBox.Show(
+                owner,
+                "另一个 BabyToys 实例正在运行儿童模式。请先在原实例中解锁或退出。",
+                "无法进入儿童模式",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return false;
+        }
 
         if (!_inputHookService.TryInstall())
         {
@@ -73,9 +90,11 @@ public sealed class ChildLockSession : IDisposable
         }
 
         _deadline = DateTimeOffset.Now.Add(_options.Duration);
+        _recoveryService.MarkActive();
         State = ChildLockState.ActiveImage;
         _imagePhaseTimer.Start();
         _countdownTimer.Start();
+        _recoveryMonitorTimer.Start();
         UpdateRemainingText();
         AppLogService.Current.Info("Child lock session active.");
         return true;
@@ -185,6 +204,7 @@ public sealed class ChildLockSession : IDisposable
             window.ShowBlackImmediately();
         }
 
+        _recoveryMonitorTimer.Start();
         if (_inputHookService.TryInstall())
         {
             _inputHookService.UnlockComboStateChanged += OnUnlockComboStateChanged;
@@ -199,6 +219,18 @@ public sealed class ChildLockSession : IDisposable
     {
         State = ChildLockState.Ended;
         AppLogService.Current.Info("Child lock session unlocked.");
+        End(raiseEndedEvent: true);
+    }
+
+    private void CheckEmergencyRecovery()
+    {
+        if (!_foregroundAppService.IsTaskManagerForeground())
+        {
+            return;
+        }
+
+        State = ChildLockState.Ended;
+        AppLogService.Current.Info("Task Manager became foreground; ending child lock for emergency recovery.");
         End(raiseEndedEvent: true);
     }
 
@@ -220,6 +252,7 @@ public sealed class ChildLockSession : IDisposable
         }
 
         _windows.Clear();
+        _recoveryService.ClearOwnedByCurrentProcess();
         if (raiseEndedEvent)
         {
             Ended?.Invoke(this, EventArgs.Empty);
@@ -231,6 +264,7 @@ public sealed class ChildLockSession : IDisposable
         _imagePhaseTimer.Stop();
         _countdownTimer.Stop();
         _unlockHoldTimer.Stop();
+        _recoveryMonitorTimer.Stop();
     }
 
     public void Dispose()
