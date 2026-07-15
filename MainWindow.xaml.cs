@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Icon = AppIconService.WindowIcon;
 
         _confirmTimer.Interval = TimeSpan.FromSeconds(1);
         _confirmTimer.Tick += ConfirmTimer_Tick;

@@ -15,6 +15,7 @@ public partial class DiagnosticsWindow : Window
     public DiagnosticsWindow()
     {
         InitializeComponent();
+        Icon = AppIconService.WindowIcon;
         Loaded += async (_, _) => await RefreshReportAsync();
     }
 
