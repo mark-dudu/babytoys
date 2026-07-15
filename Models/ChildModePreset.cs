@@ -1,13 +1,10 @@
 namespace BabyToys.Models;
 
-public sealed class AppSettings
+public sealed class ChildModePreset
 {
+    public string Name { get; set; } = string.Empty;
     public ImageSourceMode ImageSourceMode { get; set; } = ImageSourceMode.SystemWallpaper;
     public string? CustomImagePath { get; set; }
     public double DurationMinutes { get; set; } = 5;
     public bool ShowCountdown { get; set; }
-    public bool StartWithWindows { get; set; }
-    public bool EnableGlobalHotKey { get; set; } = true;
-    public string? SelectedPresetName { get; set; }
-    public List<ChildModePreset> Presets { get; set; } = [];
 }

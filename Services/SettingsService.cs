@@ -20,7 +20,9 @@ public sealed class SettingsService
             }
 
             var json = File.ReadAllText(AppPaths.SettingsPath);
-            return JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+            var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+            settings.Presets ??= [];
+            return settings;
         }
         catch (Exception ex)
         {

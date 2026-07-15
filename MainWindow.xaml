@@ -172,7 +172,7 @@
               BorderBrush="#C7D2FE"
               BorderThickness="1"
               CornerRadius="6">
-        <TextBlock Text="v1 初版"
+        <TextBlock Text="v1.1"
                    FontSize="12"
                    FontWeight="SemiBold"
                    Foreground="#3730A3" />
@@ -190,6 +190,8 @@
                     HorizontalScrollBarVisibility="Disabled">
         <Grid>
           <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -272,6 +274,40 @@
                       Content="儿童模式中显示倒计时"
                       Margin="0,10,0,0"
                       VerticalAlignment="Center" />
+          </StackPanel>
+
+          <Separator Grid.Row="6" Margin="0,18,0,18" Background="#E5EAF1" />
+
+          <StackPanel Grid.Row="7">
+            <TextBlock Text="快捷与常驻" Style="{StaticResource SectionTitleStyle}" />
+            <TextBlock Text="保存常用组合，并从托盘或快捷键快速启动。"
+                       Margin="0,4,0,8"
+                       Style="{StaticResource MutedTextStyle}" />
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="10,0,0,0">
+                <Button Content="保存预设"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Click="SavePresetButton_Click" />
+                <Button Content="删除"
+                        Margin="8,0,0,0"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Click="DeletePresetButton_Click" />
+              </StackPanel>
+              <ComboBox x:Name="PresetComboBox"
+                        Height="36"
+                        Padding="8,0"
+                        IsEditable="True"
+                        VerticalContentAlignment="Center"
+                        SelectionChanged="PresetComboBox_SelectionChanged" />
+            </DockPanel>
+            <CheckBox x:Name="EnableGlobalHotKeyCheckBox"
+                      Content="启用 Ctrl + Alt + B 快速启动"
+                      Margin="0,12,0,0"
+                      Click="OptionCheckBox_Click" />
+            <CheckBox x:Name="StartWithWindowsCheckBox"
+                      Content="登录 Windows 后自动启动到托盘"
+                      Margin="0,10,0,0"
+                      Click="OptionCheckBox_Click" />
           </StackPanel>
         </Grid>
       </ScrollViewer>

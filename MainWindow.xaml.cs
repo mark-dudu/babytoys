@@ -13,10 +13,15 @@ namespace BabyToys;
 public partial class MainWindow : Window
 {
     private readonly SettingsService _settingsService = new();
+    private readonly StartupService _startupService = new();
+    private readonly GlobalHotKeyService _globalHotKeyService = new();
+    private readonly TrayIconService _trayIconService = new();
     private readonly DispatcherTimer _confirmTimer = new();
     private AppSettings _settings = new();
     private int _confirmRemainingSeconds;
     private ChildLockSession? _session;
+    private bool _allowClose;
+    private bool _loadingPreset;
 
     public MainWindow()
     {
@@ -25,7 +30,20 @@ public partial class MainWindow : Window
         _confirmTimer.Interval = TimeSpan.FromSeconds(1);
         _confirmTimer.Tick += ConfirmTimer_Tick;
 
-        Loaded += (_, _) => LoadSettings();
+        _trayIconService.ShowRequested += (_, _) => Dispatcher.Invoke(ShowMainWindow);
+        _trayIconService.StartRequested += (_, _) => Dispatcher.Invoke(StartFromShortcut);
+        _trayIconService.ExitRequested += (_, _) => Dispatcher.Invoke(ExitApplication);
+        _globalHotKeyService.Pressed += (_, _) => StartFromShortcut();
+
+        Loaded += (_, _) =>
+        {
+            LoadSettings();
+            UpdateGlobalHotKeyRegistration();
+            if (Environment.GetCommandLineArgs().Any(arg => arg.Equals("--minimized", StringComparison.OrdinalIgnoreCase)))
+            {
+                Hide();
+            }
+        };
         PreviewKeyDown += MainWindow_PreviewKeyDown;
     }
 
@@ -38,6 +56,9 @@ public partial class MainWindow : Window
         _settings.DurationMinutes = NormalizeDurationMinutes(_settings.DurationMinutes);
         DurationTextBox.Text = FormatDurationMinutes(_settings.DurationMinutes);
         ShowCountdownCheckBox.IsChecked = _settings.ShowCountdown;
+        EnableGlobalHotKeyCheckBox.IsChecked = _settings.EnableGlobalHotKey;
+        StartWithWindowsCheckBox.IsChecked = _settings.StartWithWindows;
+        RefreshPresetList(_settings.SelectedPresetName);
         UpdateImageControls();
     }
 
@@ -51,7 +72,18 @@ public partial class MainWindow : Window
             : CustomImagePathTextBox.Text;
         _settings.DurationMinutes = ReadDurationMinutes();
         _settings.ShowCountdown = ShowCountdownCheckBox.IsChecked == true;
+        _settings.EnableGlobalHotKey = EnableGlobalHotKeyCheckBox.IsChecked == true;
+        var startWithWindows = StartWithWindowsCheckBox.IsChecked == true;
+        if (startWithWindows != _settings.StartWithWindows && !_startupService.TrySetEnabled(startWithWindows))
+        {
+            startWithWindows = _settings.StartWithWindows;
+            StartWithWindowsCheckBox.IsChecked = startWithWindows;
+            StatusTextBlock.Text = "无法更新开机自启设置";
+        }
+
+        _settings.StartWithWindows = startWithWindows;
         _settingsService.Save(_settings);
+        UpdateGlobalHotKeyRegistration();
     }
 
     private double ReadDurationMinutes()
@@ -132,6 +164,118 @@ public partial class MainWindow : Window
     {
         SaveSettingsFromUi();
         BeginConfirmCountdown();
+    }
+
+    private void StartFromShortcut()
+    {
+        if (_session is not null || _confirmTimer.IsEnabled)
+        {
+            ShowMainWindow();
+            StatusTextBlock.Text = "儿童模式已在启动或运行中";
+            return;
+        }
+
+        ShowMainWindow();
+        SaveSettingsFromUi();
+        BeginConfirmCountdown();
+    }
+
+    private void ShowMainWindow()
+    {
+        Show();
+        WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    private void UpdateGlobalHotKeyRegistration()
+    {
+        _globalHotKeyService.Unregister();
+        if (_settings.EnableGlobalHotKey && !_globalHotKeyService.Register(this))
+        {
+            StatusTextBlock.Text = "快捷键 Ctrl + Alt + B 已被其他程序占用";
+        }
+    }
+
+    private void RefreshPresetList(string? selectedName)
+    {
+        _loadingPreset = true;
+        PresetComboBox.ItemsSource = null;
+        PresetComboBox.ItemsSource = _settings.Presets.Select(preset => preset.Name).ToList();
+        PresetComboBox.Text = selectedName ?? string.Empty;
+        _loadingPreset = false;
+    }
+
+    private void PresetComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_loadingPreset || PresetComboBox.SelectedItem is not string name)
+        {
+            return;
+        }
+
+        var preset = _settings.Presets.FirstOrDefault(item => item.Name == name);
+        if (preset is null)
+        {
+            return;
+        }
+
+        SystemWallpaperRadio.IsChecked = preset.ImageSourceMode == ImageSourceMode.SystemWallpaper;
+        CustomImageRadio.IsChecked = preset.ImageSourceMode == ImageSourceMode.CustomImage;
+        CustomImagePathTextBox.Text = preset.CustomImagePath ?? string.Empty;
+        DurationTextBox.Text = FormatDurationMinutes(NormalizeDurationMinutes(preset.DurationMinutes));
+        ShowCountdownCheckBox.IsChecked = preset.ShowCountdown;
+        _settings.SelectedPresetName = preset.Name;
+        _settingsService.Save(_settings);
+        StatusTextBlock.Text = $"已应用预设：{preset.Name}";
+    }
+
+    private void SavePresetButton_Click(object sender, RoutedEventArgs e)
+    {
+        var name = PresetComboBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            StatusTextBlock.Text = "请先输入预设名称";
+            PresetComboBox.Focus();
+            return;
+        }
+
+        SaveSettingsFromUi();
+        var preset = _settings.Presets.FirstOrDefault(item => item.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (preset is null)
+        {
+            preset = new ChildModePreset { Name = name };
+            _settings.Presets.Add(preset);
+        }
+
+        preset.Name = name;
+        preset.ImageSourceMode = _settings.ImageSourceMode;
+        preset.CustomImagePath = _settings.CustomImagePath;
+        preset.DurationMinutes = _settings.DurationMinutes;
+        preset.ShowCountdown = _settings.ShowCountdown;
+        _settings.SelectedPresetName = name;
+        _settingsService.Save(_settings);
+        RefreshPresetList(name);
+        StatusTextBlock.Text = $"已保存预设：{name}";
+    }
+
+    private void DeletePresetButton_Click(object sender, RoutedEventArgs e)
+    {
+        var name = PresetComboBox.Text.Trim();
+        var removed = _settings.Presets.RemoveAll(item => item.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (removed == 0)
+        {
+            StatusTextBlock.Text = "没有可删除的预设";
+            return;
+        }
+
+        _settings.SelectedPresetName = null;
+        _settingsService.Save(_settings);
+        RefreshPresetList(null);
+        StatusTextBlock.Text = $"已删除预设：{name}";
+    }
+
+    private void OptionCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        SaveSettingsFromUi();
     }
 
     private void BeginConfirmCountdown()
@@ -226,9 +370,26 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        if (!_allowClose)
+        {
+            SaveSettingsFromUi();
+            e.Cancel = true;
+            Hide();
+            _trayIconService.ShowBalloon("BabyToys 仍在运行", "可从托盘打开或退出程序。");
+            return;
+        }
+
         _confirmTimer.Stop();
         _session?.Dispose();
         SaveSettingsFromUi();
+        _globalHotKeyService.Dispose();
+        _trayIconService.Dispose();
         base.OnClosing(e);
+    }
+
+    private void ExitApplication()
+    {
+        _allowClose = true;
+        Close();
     }
 }
