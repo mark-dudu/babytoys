@@ -23,6 +23,8 @@ public sealed class ChildLockSession : IDisposable
     private DateTimeOffset _deadline;
     private bool _disposed;
     private bool _hasEnded;
+    private bool _unlockHoldCompleted;
+    private DateTimeOffset _unlockHoldStartedAt;
 
     public ChildLockState State { get; private set; } = ChildLockState.Starting;
 
@@ -45,8 +47,8 @@ public sealed class ChildLockSession : IDisposable
         _countdownTimer.Interval = TimeSpan.FromSeconds(1);
         _countdownTimer.Tick += (_, _) => UpdateCountdownAndTimeout();
 
-        _unlockHoldTimer.Interval = TimeSpan.FromSeconds(3);
-        _unlockHoldTimer.Tick += (_, _) => Unlock();
+        _unlockHoldTimer.Interval = TimeSpan.FromMilliseconds(100);
+        _unlockHoldTimer.Tick += (_, _) => UpdateUnlockHold();
 
         _recoveryMonitorTimer.Interval = TimeSpan.FromMilliseconds(250);
         _recoveryMonitorTimer.Tick += (_, _) => CheckEmergencyRecovery();
@@ -117,20 +119,42 @@ public sealed class ChildLockSession : IDisposable
         if (isDown)
         {
             State = ChildLockState.Unlocking;
-            SetUnlockProgress(true);
+            _unlockHoldCompleted = false;
+            _unlockHoldStartedAt = DateTimeOffset.Now;
+            UpdateUnlockProgress(TimeSpan.Zero, isReady: false);
             _unlockHoldTimer.Stop();
             _unlockHoldTimer.Start();
         }
         else
         {
+            var shouldUnlock = _unlockHoldCompleted;
+            _unlockHoldCompleted = false;
             if (State == ChildLockState.Unlocking)
             {
                 State = ChildLockState.ActiveBlack;
             }
 
-            SetUnlockProgress(false);
+            HideUnlockProgress();
             _unlockHoldTimer.Stop();
+            if (shouldUnlock)
+            {
+                System.Windows.Application.Current.Dispatcher.BeginInvoke(Unlock);
+            }
         }
+    }
+
+    private void UpdateUnlockHold()
+    {
+        var elapsed = DateTimeOffset.Now - _unlockHoldStartedAt;
+        if (elapsed >= TimeSpan.FromSeconds(3))
+        {
+            _unlockHoldTimer.Stop();
+            _unlockHoldCompleted = true;
+            UpdateUnlockProgress(TimeSpan.FromSeconds(3), isReady: true);
+            return;
+        }
+
+        UpdateUnlockProgress(elapsed, isReady: false);
     }
 
     private void SwitchToBlack()
@@ -168,11 +192,19 @@ public sealed class ChildLockSession : IDisposable
         }
     }
 
-    private void SetUnlockProgress(bool isUnlocking)
+    private void UpdateUnlockProgress(TimeSpan elapsed, bool isReady)
     {
         foreach (var window in _windows)
         {
-            window.SetUnlockProgress(isUnlocking);
+            window.SetUnlockProgress(elapsed, isReady);
+        }
+    }
+
+    private void HideUnlockProgress()
+    {
+        foreach (var window in _windows)
+        {
+            window.HideUnlockProgress();
         }
     }
 
@@ -264,6 +296,7 @@ public sealed class ChildLockSession : IDisposable
         _imagePhaseTimer.Stop();
         _countdownTimer.Stop();
         _unlockHoldTimer.Stop();
+        _unlockHoldCompleted = false;
         _recoveryMonitorTimer.Stop();
     }
 

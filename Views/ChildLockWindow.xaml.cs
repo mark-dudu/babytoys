@@ -25,6 +25,7 @@ public partial class ChildLockWindow : Window
         SourceInitialized += OnSourceInitialized;
 
         StatusPanel.Visibility = showCountdown ? Visibility.Visible : Visibility.Collapsed;
+        RemainingText.Visibility = showCountdown ? Visibility.Visible : Visibility.Collapsed;
         LoadImage(imagePath);
     }
 
@@ -58,9 +59,22 @@ public partial class ChildLockWindow : Window
             : $"剩余 {remaining.Minutes:00}:{remaining.Seconds:00}";
     }
 
-    public void SetUnlockProgress(bool isUnlocking)
+    public void SetUnlockProgress(TimeSpan elapsed, bool isReady)
     {
-        UnlockText.Visibility = isUnlocking ? Visibility.Visible : Visibility.Collapsed;
+        StatusPanel.Visibility = Visibility.Visible;
+        UnlockText.Visibility = Visibility.Visible;
+        UnlockProgressBar.Visibility = Visibility.Visible;
+        UnlockProgressBar.Value = Math.Clamp(elapsed.TotalSeconds, 0, 3);
+        UnlockText.Text = isReady
+            ? "已完成，松开即可解锁"
+            : $"继续按住 {Math.Max(0, 3 - elapsed.TotalSeconds):0.0} 秒";
+    }
+
+    public void HideUnlockProgress()
+    {
+        UnlockText.Visibility = Visibility.Collapsed;
+        UnlockProgressBar.Visibility = Visibility.Collapsed;
+        StatusPanel.Visibility = _showCountdown ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void LoadImage(string? imagePath)
