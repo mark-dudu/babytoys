@@ -37,6 +37,19 @@ jobs:
         shell: pwsh
         run: ./scripts/Publish-Release.ps1
 
+      - name: Release notes smoke test
+        shell: pwsh
+        run: |
+          $project = [xml](Get-Content -Raw BabyToys.csproj)
+          $version = [string]$project.Project.PropertyGroup.Version
+          ./scripts/New-ReleaseNotes.ps1 `
+            -Version $version `
+            -ChecksumPath "artifacts/BabyToys-v$version-win-x64.zip.sha256" `
+            -OutputPath "artifacts/release-notes.md"
+          if ((Get-Item artifacts/release-notes.md).Length -eq 0) {
+            throw "Generated release notes are empty."
+          }
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v6
