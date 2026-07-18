@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Verify tag matches project version
+        shell: pwsh
+        run: |
+          $project = [xml](Get-Content -Raw BabyToys.csproj)
+          $expectedTag = "v$($project.Project.PropertyGroup.Version)"
+          if ($env:GITHUB_REF_NAME -ne $expectedTag) {
+            throw "Tag $env:GITHUB_REF_NAME does not match project version $expectedTag."
+          }
+
+      - name: Restore
+        run: dotnet restore BabyToys.Tests/BabyToys.Tests.csproj
+
+      - name: Test
+        run: dotnet test --project BabyToys.Tests/BabyToys.Tests.csproj --configuration Release --no-restore
+
+      - name: Package
+        shell: pwsh
+        run: ./scripts/Publish-Release.ps1
+
+      - name: Create GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = Get-ChildItem artifacts -File | Where-Object { $_.Extension -in ".zip", ".sha256" }
+          if ($assets.Count -ne 2) {
+            throw "Expected one ZIP and one SHA-256 file, found $($assets.Count)."
+          }
+          gh release create $env:GITHUB_REF_NAME $assets.FullName --verify-tag --generate-notes --title $env:GITHUB_REF_NAME

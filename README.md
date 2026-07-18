@@ -2,7 +2,7 @@
 
 Windows 儿童模式防误触工具。一键进入儿童模式后，程序会覆盖所有显示器、短暂显示系统壁纸或自定义图片，随后转为黑屏，并尽量拦截常规键盘鼠标输入。倒计时结束后会优先请求系统睡眠。
 
-当前开发版本为 v1.1：在 v1 儿童模式基础上加入托盘常驻、快捷启动、配置预设和开机自启；仍暂不提供安装器、自动更新或安全锁屏承诺。
+当前开发版本为 v1.2：在 v1.1 日常使用能力基础上，加入自动化测试、配置恢复、日志轮转、单实例保护以及可重复的 CI/发布流程；仍暂不提供安装器、自动更新或安全锁屏承诺。
 
 ## 目标边界
 
@@ -29,13 +29,27 @@ dotnet build
 dotnet run
 ```
 
+执行自动化测试：
+
+```powershell
+dotnet test --project BabyToys.Tests/BabyToys.Tests.csproj
+```
+
 发布单文件版本：
 
 ```powershell
-dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
+dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
 输出文件位于 `bin/Release/net10.0-windows10.0.17763.0/win-x64/publish/`。
+
+生成带版本号的 ZIP 和 SHA-256 校验文件：
+
+```powershell
+./scripts/Publish-Release.ps1
+```
+
+输出位于 `artifacts/`。`main` 分支和 Pull Request 会在 Windows GitHub Actions 中执行构建、测试和打包冒烟验证；推送与项目版本匹配的标签后会自动创建 GitHub Release。
 
 ## 当前功能
 
@@ -48,7 +62,9 @@ dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=
 - 使用 low-level keyboard hook 和 mouse hook 尽量拦截常规输入。
 - 超时后释放钩子并请求系统睡眠；睡眠请求成功后结束儿童模式，睡眠请求失败时保持黑屏并允许解锁。
 - 配置保存到 `%LocalAppData%/BabyToys/settings.json`。
-- 日志写入 `%LocalAppData%/BabyToys/logs`，只记录进入、退出、超时和错误，不记录具体按键内容。
+- 配置使用版本化结构和原子写入；文件损坏时会备份原文件并恢复安全默认值。
+- 日志写入 `%LocalAppData%/BabyToys/logs`，限制文件大小并只保留最近 14 个文件；只记录进入、退出、超时和错误，不记录具体按键内容。
+- 同一 Windows 会话只允许运行一个 BabyToys 实例，避免托盘、快捷键和设置互相冲突。
 - 支持保存、应用和删除多组儿童模式预设。
 - 支持 `Ctrl + Alt + B` 全局快捷键启动，仍会经过 3 秒确认倒计时。
 - 关闭主窗口后继续在系统托盘运行，可从托盘打开、启动儿童模式或安全退出。
@@ -97,6 +113,10 @@ dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=
 - 密码解锁。
 - 手机远程解锁。
 - MSIX 或单文件安装包与自动更新。
+
+## 维护与贡献
+
+开发边界、测试命令、提交约定和发布步骤见 [CONTRIBUTING.md](CONTRIBUTING.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 许可证
 

@@ -2,7 +2,10 @@ namespace BabyToys.Services;
 
 public sealed class AppLogService
 {
+    private const long MaximumLogFileBytes = 2 * 1024 * 1024;
+    private const int MaximumRetainedLogFiles = 14;
     private readonly object _gate = new();
+    private bool _retentionApplied;
 
     public static AppLogService Current { get; } = new();
 
@@ -44,12 +47,45 @@ public sealed class AppLogService
 
             lock (_gate)
             {
+                var rotated = RotateIfNeeded(filePath);
                 File.AppendAllText(filePath, line);
+                if (rotated || !_retentionApplied)
+                {
+                    ApplyRetention();
+                    _retentionApplied = true;
+                }
             }
         }
         catch
         {
             // Logging must never interfere with the lock session.
+        }
+    }
+
+    private static bool RotateIfNeeded(string filePath)
+    {
+        if (!File.Exists(filePath) || new FileInfo(filePath).Length < MaximumLogFileBytes)
+        {
+            return false;
+        }
+
+        var rotatedPath = Path.Combine(
+            AppPaths.LogsDirectory,
+            $"{Path.GetFileNameWithoutExtension(filePath)}-{DateTime.Now:HHmmss}-{Guid.NewGuid():N}.log");
+        File.Move(filePath, rotatedPath);
+        return true;
+    }
+
+    private static void ApplyRetention()
+    {
+        var expiredFiles = new DirectoryInfo(AppPaths.LogsDirectory)
+            .EnumerateFiles("*.log")
+            .OrderByDescending(file => file.LastWriteTimeUtc)
+            .Skip(MaximumRetainedLogFiles);
+
+        foreach (var file in expiredFiles)
+        {
+            file.Delete();
         }
     }
 }

@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Globalization;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -67,14 +66,17 @@ public partial class MainWindow : Window
         SystemWallpaperRadio.IsChecked = _settings.ImageSourceMode == ImageSourceMode.SystemWallpaper;
         CustomImageRadio.IsChecked = _settings.ImageSourceMode == ImageSourceMode.CustomImage;
         CustomImagePathTextBox.Text = _settings.CustomImagePath ?? string.Empty;
-        _settings.DurationMinutes = NormalizeDurationMinutes(_settings.DurationMinutes);
-        DurationTextBox.Text = FormatDurationMinutes(_settings.DurationMinutes);
+        DurationTextBox.Text = SettingsPolicy.FormatDurationMinutes(_settings.DurationMinutes);
         ShowCountdownCheckBox.IsChecked = _settings.ShowCountdown;
         EnableGlobalHotKeyCheckBox.IsChecked = _settings.EnableGlobalHotKey;
         StartWithWindowsCheckBox.IsChecked = _settings.StartWithWindows;
         ReconcileStartupRegistration();
         RefreshPresetList(_settings.SelectedPresetName);
         UpdateImageControls();
+        if (_settingsService.IsReadOnlyDueToUnsupportedSchema)
+        {
+            StatusTextBlock.Text = $"检测到来自更高版本的配置（版本 {_settingsService.UnsupportedSchemaVersion}），本次更改不会保存";
+        }
     }
 
     private void SaveSettingsFromUi()
@@ -89,7 +91,12 @@ public partial class MainWindow : Window
         _settings.ShowCountdown = ShowCountdownCheckBox.IsChecked == true;
         _settings.EnableGlobalHotKey = EnableGlobalHotKeyCheckBox.IsChecked == true;
         var startWithWindows = StartWithWindowsCheckBox.IsChecked == true;
-        if (startWithWindows != _startupService.IsEnabled() && !_startupService.TrySetEnabled(startWithWindows))
+        if (_settingsService.IsReadOnlyDueToUnsupportedSchema)
+        {
+            startWithWindows = _settings.StartWithWindows;
+            StartWithWindowsCheckBox.IsChecked = startWithWindows;
+        }
+        else if (startWithWindows != _startupService.IsEnabled() && !_startupService.TrySetEnabled(startWithWindows))
         {
             startWithWindows = _settings.StartWithWindows;
             StartWithWindowsCheckBox.IsChecked = startWithWindows;
@@ -103,6 +110,11 @@ public partial class MainWindow : Window
 
     private void ReconcileStartupRegistration()
     {
+        if (_settingsService.IsReadOnlyDueToUnsupportedSchema)
+        {
+            return;
+        }
+
         if (_settings.StartWithWindows == _startupService.IsEnabled())
         {
             return;
@@ -120,42 +132,21 @@ public partial class MainWindow : Window
     private double ReadDurationMinutes()
     {
         var text = DurationTextBox.Text.Trim();
-        if (!TryParseDurationMinutes(text, out var minutes))
+        if (!SettingsPolicy.TryParseDurationMinutes(text, out var minutes))
         {
             StatusTextBlock.Text = "时间设置无效，已恢复为 5 分钟";
             DurationTextBox.Text = "5";
             return 5;
         }
 
-        var normalized = NormalizeDurationMinutes(minutes);
+        var normalized = SettingsPolicy.NormalizeDurationMinutes(minutes);
         if (Math.Abs(normalized - minutes) > 0.0001)
         {
-            StatusTextBlock.Text = $"时间已调整为 {FormatDurationMinutes(normalized)} 分钟";
-            DurationTextBox.Text = FormatDurationMinutes(normalized);
+            StatusTextBlock.Text = $"时间已调整为 {SettingsPolicy.FormatDurationMinutes(normalized)} 分钟";
+            DurationTextBox.Text = SettingsPolicy.FormatDurationMinutes(normalized);
         }
 
         return normalized;
-    }
-
-    private static bool TryParseDurationMinutes(string text, out double minutes)
-    {
-        return double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out minutes) ||
-            double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out minutes);
-    }
-
-    private static double NormalizeDurationMinutes(double minutes)
-    {
-        if (double.IsNaN(minutes) || double.IsInfinity(minutes))
-        {
-            return 5;
-        }
-
-        return Math.Clamp(minutes, 0.5, 240);
-    }
-
-    private static string FormatDurationMinutes(double minutes)
-    {
-        return minutes.ToString("0.##", CultureInfo.InvariantCulture);
     }
 
     private void ImageSource_Checked(object sender, RoutedEventArgs e)
@@ -278,7 +269,7 @@ public partial class MainWindow : Window
         SystemWallpaperRadio.IsChecked = preset.ImageSourceMode == ImageSourceMode.SystemWallpaper;
         CustomImageRadio.IsChecked = preset.ImageSourceMode == ImageSourceMode.CustomImage;
         CustomImagePathTextBox.Text = preset.CustomImagePath ?? string.Empty;
-        DurationTextBox.Text = FormatDurationMinutes(NormalizeDurationMinutes(preset.DurationMinutes));
+        DurationTextBox.Text = SettingsPolicy.FormatDurationMinutes(preset.DurationMinutes);
         ShowCountdownCheckBox.IsChecked = preset.ShowCountdown;
         _settings.SelectedPresetName = preset.Name;
         _settingsService.Save(_settings);

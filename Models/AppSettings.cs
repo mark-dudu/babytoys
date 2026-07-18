@@ -2,6 +2,9 @@ namespace BabyToys.Models;
 
 public sealed class AppSettings
 {
+    public const int CurrentSchemaVersion = 1;
+
+    public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public ImageSourceMode ImageSourceMode { get; set; } = ImageSourceMode.SystemWallpaper;
     public string? CustomImagePath { get; set; }
     public double DurationMinutes { get; set; } = 5;

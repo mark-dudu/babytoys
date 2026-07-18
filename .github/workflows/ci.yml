@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: |
+            packages.lock.json
+            BabyToys.Tests/packages.lock.json
+
+      - name: Restore
+        run: dotnet restore BabyToys.Tests/BabyToys.Tests.csproj
+
+      - name: Build
+        run: dotnet build BabyToys.Tests/BabyToys.Tests.csproj --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --project BabyToys.Tests/BabyToys.Tests.csproj --configuration Release --no-build --report-trx --report-trx-filename babytoys.trx --results-directory BabyToys.Tests/TestResults
+
+      - name: Package smoke test
+        shell: pwsh
+        run: ./scripts/Publish-Release.ps1
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: BabyToys.Tests/TestResults/*.trx
+          if-no-files-found: warn
+
+      - name: Upload release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: babytoys-win-x64
+          path: |
+            artifacts/*.zip
+            artifacts/*.sha256
+          if-no-files-found: error

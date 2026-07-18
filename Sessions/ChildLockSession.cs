@@ -83,23 +83,38 @@ public sealed class ChildLockSession : IDisposable
 
         _inputHookService.UnlockComboStateChanged += OnUnlockComboStateChanged;
 
-        var imagePath = ResolveImagePath();
-        foreach (var screen in Forms.Screen.AllScreens)
+        try
         {
-            var window = new ChildLockWindow(screen.Bounds, imagePath, _options.ShowCountdown);
-            window.Show();
-            _windows.Add(window);
-        }
+            var imagePath = ResolveImagePath();
+            foreach (var screen in Forms.Screen.AllScreens)
+            {
+                var window = new ChildLockWindow(screen.Bounds, imagePath, _options.ShowCountdown);
+                window.Show();
+                _windows.Add(window);
+            }
 
-        _deadline = DateTimeOffset.Now.Add(_options.Duration);
-        _recoveryService.MarkActive();
-        State = ChildLockState.ActiveImage;
-        _imagePhaseTimer.Start();
-        _countdownTimer.Start();
-        _recoveryMonitorTimer.Start();
-        UpdateRemainingText();
-        AppLogService.Current.Info("Child lock session active.");
-        return true;
+            _deadline = DateTimeOffset.Now.Add(_options.Duration);
+            _recoveryService.MarkActive();
+            State = ChildLockState.ActiveImage;
+            _imagePhaseTimer.Start();
+            _countdownTimer.Start();
+            _recoveryMonitorTimer.Start();
+            UpdateRemainingText();
+            AppLogService.Current.Info("Child lock session active.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLogService.Current.Error("Failed while creating child lock session windows.", ex);
+            End(raiseEndedEvent: false);
+            System.Windows.MessageBox.Show(
+                owner,
+                "儿童模式启动过程中发生错误，已安全释放输入拦截。请打开诊断查看日志。",
+                "无法进入儿童模式",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return false;
+        }
     }
 
     private string? ResolveImagePath()
@@ -146,11 +161,11 @@ public sealed class ChildLockSession : IDisposable
     private void UpdateUnlockHold()
     {
         var elapsed = DateTimeOffset.Now - _unlockHoldStartedAt;
-        if (elapsed >= TimeSpan.FromSeconds(3))
+        if (ChildLockPolicy.IsUnlockReady(elapsed))
         {
             _unlockHoldTimer.Stop();
             _unlockHoldCompleted = true;
-            UpdateUnlockProgress(TimeSpan.FromSeconds(3), isReady: true);
+            UpdateUnlockProgress(ChildLockPolicy.UnlockHoldDuration, isReady: true);
             return;
         }
 
@@ -180,11 +195,7 @@ public sealed class ChildLockSession : IDisposable
 
     private void UpdateRemainingText()
     {
-        var remaining = _deadline - DateTimeOffset.Now;
-        if (remaining < TimeSpan.Zero)
-        {
-            remaining = TimeSpan.Zero;
-        }
+        var remaining = ChildLockPolicy.GetRemaining(_deadline, DateTimeOffset.Now);
 
         foreach (var window in _windows)
         {
@@ -218,16 +229,15 @@ public sealed class ChildLockSession : IDisposable
 
         State = ChildLockState.Sleeping;
         var sleepRequested = _powerService.TrySuspend();
-        if (sleepRequested)
+        State = ChildLockPolicy.GetStateAfterSleepRequest(sleepRequested);
+        if (State == ChildLockState.Ended)
         {
-            State = ChildLockState.Ended;
             AppLogService.Current.Info("System returned from successful sleep request; ending child lock session.");
             End(raiseEndedEvent: true);
             return;
         }
         else
         {
-            State = ChildLockState.SleepFailedBlack;
             AppLogService.Current.Error("Sleep request failed; keeping black screen active.");
         }
 
