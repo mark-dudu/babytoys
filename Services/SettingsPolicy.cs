@@ -38,9 +38,20 @@ public static class SettingsPolicy
                 $"Settings schema {settings.SchemaVersion} is newer than supported schema {AppSettings.CurrentSchemaVersion}.");
         }
 
+        var sourceSchemaVersion = settings.SchemaVersion;
+        if (sourceSchemaVersion < 2)
+        {
+            settings.EntryVisualMode = EntryVisualMode.FadeFromImage;
+        }
+
         settings.SchemaVersion = AppSettings.CurrentSchemaVersion;
         settings.DurationMinutes = NormalizeDurationMinutes(settings.DurationMinutes);
         settings.Presets ??= [];
+
+        if (!Enum.IsDefined(settings.EntryVisualMode))
+        {
+            settings.EntryVisualMode = EntryVisualMode.ImmediateBlack;
+        }
 
         var normalizedPresets = new List<ChildModePreset>();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -58,6 +69,15 @@ public static class SettingsPolicy
             }
 
             preset.Name = name;
+            if (sourceSchemaVersion < 2)
+            {
+                preset.EntryVisualMode = EntryVisualMode.FadeFromImage;
+            }
+            else if (!Enum.IsDefined(preset.EntryVisualMode))
+            {
+                preset.EntryVisualMode = EntryVisualMode.ImmediateBlack;
+            }
+
             if (!Enum.IsDefined(preset.ImageSourceMode))
             {
                 preset.ImageSourceMode = ImageSourceMode.SystemWallpaper;

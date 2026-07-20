@@ -43,7 +43,14 @@ public sealed class SettingsService
             }
 
             var json = File.ReadAllText(_settingsPath);
+            using var document = JsonDocument.Parse(json);
+            var hasSchemaVersion = document.RootElement.TryGetProperty(nameof(AppSettings.SchemaVersion), out _);
             var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+            if (!hasSchemaVersion)
+            {
+                settings.SchemaVersion = 0;
+            }
+
             if (settings.SchemaVersion > AppSettings.CurrentSchemaVersion)
             {
                 IsReadOnlyDueToUnsupportedSchema = true;

@@ -43,11 +43,21 @@ public sealed class SettingsPolicyTests
         SettingsPolicy.Normalize(settings);
 
         Assert.AreEqual(AppSettings.CurrentSchemaVersion, settings.SchemaVersion);
+        Assert.AreEqual(EntryVisualMode.FadeFromImage, settings.EntryVisualMode);
         Assert.AreEqual(SettingsPolicy.MinimumDurationMinutes, settings.DurationMinutes);
         Assert.HasCount(1, settings.Presets);
         Assert.AreEqual("Quiet", settings.Presets[0].Name);
         Assert.AreEqual(SettingsPolicy.MaximumDurationMinutes, settings.Presets[0].DurationMinutes);
+        Assert.AreEqual(EntryVisualMode.FadeFromImage, settings.Presets[0].EntryVisualMode);
         Assert.AreEqual("Quiet", settings.SelectedPresetName);
+    }
+
+    [TestMethod]
+    public void Normalize_NewSettingsUseImmediateBlack()
+    {
+        var settings = SettingsPolicy.Normalize(new AppSettings());
+
+        Assert.AreEqual(EntryVisualMode.ImmediateBlack, settings.EntryVisualMode);
     }
 
     [TestMethod]

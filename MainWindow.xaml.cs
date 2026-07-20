@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         Icon = AppIconService.WindowIcon;
+        VersionTextBlock.Text = $"v{typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "未知"}";
 
         _confirmTimer.Interval = TimeSpan.FromSeconds(1);
         _confirmTimer.Tick += ConfirmTimer_Tick;
@@ -63,6 +64,8 @@ public partial class MainWindow : Window
     private void LoadSettings()
     {
         _settings = _settingsService.Load();
+        ImmediateBlackRadio.IsChecked = _settings.EntryVisualMode == EntryVisualMode.ImmediateBlack;
+        FadeFromImageRadio.IsChecked = _settings.EntryVisualMode == EntryVisualMode.FadeFromImage;
         SystemWallpaperRadio.IsChecked = _settings.ImageSourceMode == ImageSourceMode.SystemWallpaper;
         CustomImageRadio.IsChecked = _settings.ImageSourceMode == ImageSourceMode.CustomImage;
         CustomImagePathTextBox.Text = _settings.CustomImagePath ?? string.Empty;
@@ -81,6 +84,9 @@ public partial class MainWindow : Window
 
     private void SaveSettingsFromUi()
     {
+        _settings.EntryVisualMode = FadeFromImageRadio.IsChecked == true
+            ? EntryVisualMode.FadeFromImage
+            : EntryVisualMode.ImmediateBlack;
         _settings.ImageSourceMode = CustomImageRadio.IsChecked == true
             ? ImageSourceMode.CustomImage
             : ImageSourceMode.SystemWallpaper;
@@ -156,12 +162,14 @@ public partial class MainWindow : Window
 
     private void UpdateImageControls()
     {
-        if (ChooseImageButton is null || CustomImagePathTextBox is null)
+        if (ImageSourcePanel is null || ChooseImageButton is null || CustomImagePathTextBox is null)
         {
             return;
         }
 
-        var customEnabled = CustomImageRadio?.IsChecked == true;
+        var imageEnabled = FadeFromImageRadio?.IsChecked == true;
+        ImageSourcePanel.IsEnabled = imageEnabled;
+        var customEnabled = imageEnabled && CustomImageRadio?.IsChecked == true;
         ChooseImageButton.IsEnabled = customEnabled;
         CustomImagePathTextBox.IsEnabled = customEnabled;
     }
@@ -268,6 +276,8 @@ public partial class MainWindow : Window
 
         SystemWallpaperRadio.IsChecked = preset.ImageSourceMode == ImageSourceMode.SystemWallpaper;
         CustomImageRadio.IsChecked = preset.ImageSourceMode == ImageSourceMode.CustomImage;
+        ImmediateBlackRadio.IsChecked = preset.EntryVisualMode == EntryVisualMode.ImmediateBlack;
+        FadeFromImageRadio.IsChecked = preset.EntryVisualMode == EntryVisualMode.FadeFromImage;
         CustomImagePathTextBox.Text = preset.CustomImagePath ?? string.Empty;
         DurationTextBox.Text = SettingsPolicy.FormatDurationMinutes(preset.DurationMinutes);
         ShowCountdownCheckBox.IsChecked = preset.ShowCountdown;
@@ -295,6 +305,7 @@ public partial class MainWindow : Window
         }
 
         preset.Name = name;
+        preset.EntryVisualMode = _settings.EntryVisualMode;
         preset.ImageSourceMode = _settings.ImageSourceMode;
         preset.CustomImagePath = _settings.CustomImagePath;
         preset.DurationMinutes = _settings.DurationMinutes;
@@ -375,6 +386,7 @@ public partial class MainWindow : Window
     {
         var options = new ChildLockOptions
         {
+            EntryVisualMode = _settings.EntryVisualMode,
             ImageSourceMode = _settings.ImageSourceMode,
             CustomImagePath = _settings.CustomImagePath,
             Duration = TimeSpan.FromMinutes(_settings.DurationMinutes),

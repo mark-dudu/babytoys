@@ -55,6 +55,33 @@ public sealed class SettingsServiceTests
     }
 
     [TestMethod]
+    public void Load_LegacySettingsWithoutSchemaKeepsImageFadeBehavior()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(
+            _settingsPath,
+            """
+            {
+              "ImageSourceMode": 0,
+              "DurationMinutes": 8,
+              "Presets": [
+                {
+                  "Name": "旧预设",
+                  "DurationMinutes": 8
+                }
+              ]
+            }
+            """);
+        var service = CreateService();
+
+        var loaded = service.Load();
+
+        Assert.AreEqual(AppSettings.CurrentSchemaVersion, loaded.SchemaVersion);
+        Assert.AreEqual(EntryVisualMode.FadeFromImage, loaded.EntryVisualMode);
+        Assert.AreEqual(EntryVisualMode.FadeFromImage, loaded.Presets[0].EntryVisualMode);
+    }
+
+    [TestMethod]
     public void Load_NewerSchemaKeepsOriginalFileAndBlocksSave()
     {
         Directory.CreateDirectory(_directory);

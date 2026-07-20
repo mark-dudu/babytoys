@@ -85,18 +85,22 @@ public sealed class ChildLockSession : IDisposable
 
         try
         {
-            var imagePath = ResolveImagePath();
+            var startsBlack = _options.EntryVisualMode == EntryVisualMode.ImmediateBlack;
+            var imagePath = startsBlack ? null : ResolveImagePath();
             foreach (var screen in Forms.Screen.AllScreens)
             {
-                var window = new ChildLockWindow(screen.Bounds, imagePath, _options.ShowCountdown);
+                var window = new ChildLockWindow(screen.Bounds, imagePath, _options.ShowCountdown, startsBlack);
                 window.Show();
                 _windows.Add(window);
             }
 
             _deadline = DateTimeOffset.Now.Add(_options.Duration);
             _recoveryService.MarkActive();
-            State = ChildLockState.ActiveImage;
-            _imagePhaseTimer.Start();
+            State = startsBlack ? ChildLockState.ActiveBlack : ChildLockState.ActiveImage;
+            if (!startsBlack)
+            {
+                _imagePhaseTimer.Start();
+            }
             _countdownTimer.Start();
             _recoveryMonitorTimer.Start();
             UpdateRemainingText();

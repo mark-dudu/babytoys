@@ -12,7 +12,7 @@ public partial class ChildLockWindow : Window
     private readonly bool _showCountdown;
     private readonly Drawing.Rectangle _bounds;
 
-    public ChildLockWindow(Drawing.Rectangle bounds, string? imagePath, bool showCountdown)
+    public ChildLockWindow(Drawing.Rectangle bounds, string? imagePath, bool showCountdown, bool startsBlack)
     {
         InitializeComponent();
         _showCountdown = showCountdown;
@@ -27,6 +27,10 @@ public partial class ChildLockWindow : Window
         StatusPanel.Visibility = showCountdown ? Visibility.Visible : Visibility.Collapsed;
         RemainingText.Visibility = showCountdown ? Visibility.Visible : Visibility.Collapsed;
         LoadImage(imagePath);
+        if (startsBlack)
+        {
+            ShowBlackImmediately();
+        }
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)

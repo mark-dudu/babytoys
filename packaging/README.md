@@ -1,4 +1,4 @@
-# BabyToys v1.2 使用说明
+# BabyToys 使用说明
 
 BabyToys 是 Windows 儿童模式防误触工具，用于减少孩子拍打键盘、鼠标造成的误操作，并降低屏幕吸引力。它不是安全锁屏软件。
 
@@ -39,7 +39,7 @@ BabyToys 不能阻止 `Ctrl + Alt + Del`、UAC 安全桌面、硬件电源键或
 Release 同时提供 `.sha256` 文件。可在 PowerShell 中运行：
 
 ```powershell
-Get-FileHash .\BabyToys-v1.2.0-win-x64.zip -Algorithm SHA256
+Get-FileHash .\BabyToys-v*-win-x64.zip -Algorithm SHA256
 ```
 
 结果应与 `.sha256` 文件中的值一致。

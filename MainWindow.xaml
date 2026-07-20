@@ -176,7 +176,7 @@
                 BorderBrush="#C7D2FE"
                 BorderThickness="1"
                 CornerRadius="6">
-          <TextBlock Text="v1.1"
+          <TextBlock x:Name="VersionTextBlock"
                      FontSize="12"
                      FontWeight="SemiBold"
                      Foreground="#3730A3" />
@@ -226,30 +226,42 @@
           </Border>
 
           <StackPanel Grid.Row="1" Margin="0,18,0,0">
-            <TextBlock Text="图片来源" Style="{StaticResource SectionTitleStyle}" />
-            <TextBlock Text="进入后先显示图片，10 秒后自动转为黑屏。"
-                       Margin="0,4,0,2"
+            <TextBlock Text="进入画面" Style="{StaticResource SectionTitleStyle}" />
+            <TextBlock Text="优先让电脑迅速变得无趣，减少宝宝继续拍打键鼠的兴趣。"
+                       Margin="0,4,0,8"
                        Style="{StaticResource MutedTextStyle}" />
-            <RadioButton x:Name="SystemWallpaperRadio"
-                         Content="使用系统壁纸"
-                         GroupName="ImageSource"
+            <RadioButton x:Name="ImmediateBlackRadio"
+                         Content="立即黑屏（推荐）"
+                         GroupName="EntryVisual"
                          IsChecked="True"
                          Checked="ImageSource_Checked" />
-            <RadioButton x:Name="CustomImageRadio"
-                         Content="使用自定义图片"
-                         GroupName="ImageSource"
+            <RadioButton x:Name="FadeFromImageRadio"
+                         Content="短暂显示图片，10 秒后渐暗"
+                         GroupName="EntryVisual"
                          Checked="ImageSource_Checked" />
 
-            <DockPanel Margin="0,10,0,0">
-              <Button x:Name="ChooseImageButton"
-                      Content="选择图片"
-                      Style="{StaticResource SecondaryButtonStyle}"
-                      DockPanel.Dock="Right"
-                      Click="ChooseImageButton_Click" />
-              <TextBox x:Name="CustomImagePathTextBox"
-                       Margin="0,0,10,0"
-                       IsReadOnly="True" />
-            </DockPanel>
+            <StackPanel x:Name="ImageSourcePanel" Margin="20,8,0,0">
+              <RadioButton x:Name="SystemWallpaperRadio"
+                           Content="使用系统壁纸"
+                           GroupName="ImageSource"
+                           IsChecked="True"
+                           Checked="ImageSource_Checked" />
+              <RadioButton x:Name="CustomImageRadio"
+                           Content="使用自定义图片"
+                           GroupName="ImageSource"
+                           Checked="ImageSource_Checked" />
+
+              <DockPanel Margin="0,10,0,0">
+                <Button x:Name="ChooseImageButton"
+                        Content="选择图片"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        DockPanel.Dock="Right"
+                        Click="ChooseImageButton_Click" />
+                <TextBox x:Name="CustomImagePathTextBox"
+                         Margin="0,0,10,0"
+                         IsReadOnly="True" />
+              </DockPanel>
+            </StackPanel>
           </StackPanel>
 
           <Separator Grid.Row="2" Margin="0,18,0,18" Background="#E5EAF1" />
