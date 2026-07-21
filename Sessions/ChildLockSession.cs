@@ -20,9 +20,11 @@ public sealed class ChildLockSession : IDisposable
     private readonly DispatcherTimer _countdownTimer = new();
     private readonly DispatcherTimer _unlockHoldTimer = new();
     private readonly DispatcherTimer _recoveryMonitorTimer = new();
+    private readonly DispatcherTimer _sleepRecoveryTimer = new();
     private DateTimeOffset _deadline;
     private bool _disposed;
     private bool _hasEnded;
+    private bool _isPostTimeoutProtection;
     private bool _unlockHoldCompleted;
     private DateTimeOffset _unlockHoldStartedAt;
 
@@ -52,6 +54,12 @@ public sealed class ChildLockSession : IDisposable
 
         _recoveryMonitorTimer.Interval = TimeSpan.FromMilliseconds(250);
         _recoveryMonitorTimer.Tick += (_, _) => CheckEmergencyRecovery();
+
+        _sleepRecoveryTimer.Interval = TimeSpan.FromSeconds(8);
+        _sleepRecoveryTimer.Tick += (_, _) => RecoverAfterSleep("sleep request watchdog");
+
+        _powerService.Resumed += OnSystemResumed;
+        _powerService.DisplaySettingsChanged += OnDisplaySettingsChanged;
     }
 
     public bool Start(Window owner)
@@ -67,6 +75,17 @@ public sealed class ChildLockSession : IDisposable
                 "无法进入儿童模式",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
+            return false;
+        }
+
+        if (!_powerService.TryStartMonitoring())
+        {
+            System.Windows.MessageBox.Show(
+                owner,
+                "无法监测睡眠恢复和显示器变化，已取消进入儿童模式。请打开诊断查看日志。",
+                "无法进入儿童模式",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
             return false;
         }
 
@@ -87,12 +106,7 @@ public sealed class ChildLockSession : IDisposable
         {
             var startsBlack = _options.EntryVisualMode == EntryVisualMode.ImmediateBlack;
             var imagePath = startsBlack ? null : ResolveImagePath();
-            foreach (var screen in Forms.Screen.AllScreens)
-            {
-                var window = new ChildLockWindow(screen.Bounds, imagePath, _options.ShowCountdown, startsBlack);
-                window.Show();
-                _windows.Add(window);
-            }
+            CreateWindows(imagePath, startsBlack);
 
             _deadline = DateTimeOffset.Now.Add(_options.Duration);
             _recoveryService.MarkActive();
@@ -226,38 +240,152 @@ public sealed class ChildLockSession : IDisposable
     private void Timeout()
     {
         State = ChildLockState.Timeout;
+        _isPostTimeoutProtection = true;
         AppLogService.Current.Info("Child lock session timed out.");
         StopTimers();
         _inputHookService.UnlockComboStateChanged -= OnUnlockComboStateChanged;
         _inputHookService.Uninstall();
 
+        foreach (var window in _windows)
+        {
+            window.EnterPersistentBlackMode();
+        }
+
         State = ChildLockState.Sleeping;
         var sleepRequested = _powerService.TrySuspend();
         State = ChildLockPolicy.GetStateAfterSleepRequest(sleepRequested);
-        if (State == ChildLockState.Ended)
+        if (State == ChildLockState.Sleeping)
         {
-            AppLogService.Current.Info("System returned from successful sleep request; ending child lock session.");
-            End(raiseEndedEvent: true);
+            AppLogService.Current.Info("Sleep request accepted; waiting for system resume.");
+            _sleepRecoveryTimer.Start();
             return;
         }
-        else
+
+        AppLogService.Current.Error("Sleep request failed; keeping black screen active.");
+        RestoreBlackProtection("failed sleep request", ChildLockState.SleepFailedBlack);
+    }
+
+    private void OnSystemResumed(object? sender, EventArgs e)
+    {
+        System.Windows.Application.Current.Dispatcher.BeginInvoke(
+            () => RecoverAfterSleep("system resume notification"));
+    }
+
+    private void RecoverAfterSleep(string reason)
+    {
+        _sleepRecoveryTimer.Stop();
+        if (_hasEnded || State != ChildLockState.Sleeping)
         {
-            AppLogService.Current.Error("Sleep request failed; keeping black screen active.");
+            return;
+        }
+
+        AppLogService.Current.Info($"Restoring child lock after {reason}.");
+        RestoreBlackProtection(reason, ChildLockState.ActiveBlack);
+    }
+
+    private void RestoreBlackProtection(string reason, ChildLockState restoredState)
+    {
+        try
+        {
+            ReplaceWindows(imagePath: null, startsBlack: true);
+            SuppressPostTimeoutCountdown();
+            if (!_inputHookService.TryInstall())
+            {
+                throw new InvalidOperationException("Input hooks could not be installed.");
+            }
+
+            _inputHookService.UnlockComboStateChanged -= OnUnlockComboStateChanged;
+            _inputHookService.UnlockComboStateChanged += OnUnlockComboStateChanged;
+            State = restoredState;
+            _recoveryMonitorTimer.Start();
+            AppLogService.Current.Info($"Child lock protection restored after {reason}.");
+        }
+        catch (Exception ex)
+        {
+            AppLogService.Current.Error($"Failed to restore child lock protection after {reason}; ending safely.", ex);
+            End(raiseEndedEvent: true);
+        }
+    }
+
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+    {
+        System.Windows.Application.Current.Dispatcher.BeginInvoke(RefreshDisplayCoverage);
+    }
+
+    private void RefreshDisplayCoverage()
+    {
+        if (_hasEnded || State == ChildLockState.Sleeping)
+        {
+            return;
+        }
+
+        try
+        {
+            var startsBlack = State != ChildLockState.ActiveImage;
+            var imagePath = startsBlack ? null : ResolveImagePath();
+            ReplaceWindows(imagePath, startsBlack);
+            SuppressPostTimeoutCountdown();
+            UpdateRemainingText();
+            AppLogService.Current.Info("Child lock display coverage refreshed.");
+        }
+        catch (Exception ex)
+        {
+            AppLogService.Current.Error("Failed to refresh child lock display coverage; ending safely.", ex);
+            End(raiseEndedEvent: true);
+        }
+    }
+
+    private void CreateWindows(string? imagePath, bool startsBlack)
+    {
+        foreach (var screen in Forms.Screen.AllScreens)
+        {
+            var window = new ChildLockWindow(screen.Bounds, imagePath, _options.ShowCountdown, startsBlack);
+            window.Show();
+            _windows.Add(window);
+        }
+    }
+
+    private void ReplaceWindows(string? imagePath, bool startsBlack)
+    {
+        var replacements = new List<ChildLockWindow>();
+        try
+        {
+            foreach (var screen in Forms.Screen.AllScreens)
+            {
+                var window = new ChildLockWindow(screen.Bounds, imagePath, _options.ShowCountdown, startsBlack);
+                window.Show();
+                replacements.Add(window);
+            }
+        }
+        catch
+        {
+            foreach (var replacement in replacements)
+            {
+                replacement.Close();
+            }
+
+            throw;
         }
 
         foreach (var window in _windows)
         {
-            window.ShowBlackImmediately();
+            window.Close();
         }
 
-        _recoveryMonitorTimer.Start();
-        if (_inputHookService.TryInstall())
+        _windows.Clear();
+        _windows.AddRange(replacements);
+    }
+
+    private void SuppressPostTimeoutCountdown()
+    {
+        if (!_isPostTimeoutProtection)
         {
-            _inputHookService.UnlockComboStateChanged += OnUnlockComboStateChanged;
+            return;
         }
-        else
+
+        foreach (var window in _windows)
         {
-            AppLogService.Current.Error("Failed to reinstall input hooks after sleep fallback.");
+            window.EnterPersistentBlackMode();
         }
     }
 
@@ -298,6 +426,9 @@ public sealed class ChildLockSession : IDisposable
         }
 
         _windows.Clear();
+        _powerService.Resumed -= OnSystemResumed;
+        _powerService.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+        _powerService.Dispose();
         _recoveryService.ClearOwnedByCurrentProcess();
         if (raiseEndedEvent)
         {
@@ -312,6 +443,7 @@ public sealed class ChildLockSession : IDisposable
         _unlockHoldTimer.Stop();
         _unlockHoldCompleted = false;
         _recoveryMonitorTimer.Stop();
+        _sleepRecoveryTimer.Stop();
     }
 
     public void Dispose()

@@ -9,7 +9,7 @@ public static class ChildLockPolicy
     public static bool IsUnlockReady(TimeSpan elapsed) => elapsed >= UnlockHoldDuration;
 
     public static ChildLockState GetStateAfterSleepRequest(bool succeeded) =>
-        succeeded ? ChildLockState.Ended : ChildLockState.SleepFailedBlack;
+        succeeded ? ChildLockState.Sleeping : ChildLockState.SleepFailedBlack;
 
     public static TimeSpan GetRemaining(DateTimeOffset deadline, DateTimeOffset now)
     {

@@ -14,9 +14,9 @@ public sealed class ChildLockPolicyTests
     }
 
     [TestMethod]
-    public void SleepResultSelectsSafeTerminalState()
+    public void SuccessfulSleepRequestKeepsSessionRecoverable()
     {
-        Assert.AreEqual(ChildLockState.Ended, ChildLockPolicy.GetStateAfterSleepRequest(succeeded: true));
+        Assert.AreEqual(ChildLockState.Sleeping, ChildLockPolicy.GetStateAfterSleepRequest(succeeded: true));
         Assert.AreEqual(ChildLockState.SleepFailedBlack, ChildLockPolicy.GetStateAfterSleepRequest(succeeded: false));
     }
 

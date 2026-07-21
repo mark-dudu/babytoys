@@ -11,6 +11,7 @@ public partial class ChildLockWindow : Window
 {
     private readonly bool _showCountdown;
     private readonly Drawing.Rectangle _bounds;
+    private bool _countdownSuppressed;
 
     public ChildLockWindow(Drawing.Rectangle bounds, string? imagePath, bool showCountdown, bool startsBlack)
     {
@@ -51,6 +52,17 @@ public partial class ChildLockWindow : Window
         BlackOverlay.Opacity = 1;
     }
 
+    public void EnterPersistentBlackMode()
+    {
+        _countdownSuppressed = true;
+        ShowBlackImmediately();
+        RemainingText.Visibility = Visibility.Collapsed;
+        if (UnlockText.Visibility != Visibility.Visible)
+        {
+            StatusPanel.Visibility = Visibility.Collapsed;
+        }
+    }
+
     public void SetRemaining(TimeSpan remaining)
     {
         if (!_showCountdown)
@@ -78,7 +90,9 @@ public partial class ChildLockWindow : Window
     {
         UnlockText.Visibility = Visibility.Collapsed;
         UnlockProgressBar.Visibility = Visibility.Collapsed;
-        StatusPanel.Visibility = _showCountdown ? Visibility.Visible : Visibility.Collapsed;
+        StatusPanel.Visibility = _showCountdown && !_countdownSuppressed
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private void LoadImage(string? imagePath)
