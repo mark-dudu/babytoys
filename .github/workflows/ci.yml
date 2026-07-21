@@ -44,6 +44,7 @@ jobs:
           $version = [string]$project.Project.PropertyGroup.Version
           ./scripts/New-ReleaseNotes.ps1 `
             -Version $version `
+            -FallbackSection "未发布" `
             -ChecksumPath "artifacts/BabyToys-v$version-win-x64.zip.sha256" `
             -OutputPath "artifacts/release-notes.md"
           if ((Get-Item artifacts/release-notes.md).Length -eq 0) {

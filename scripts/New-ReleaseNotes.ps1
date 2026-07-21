@@ -2,6 +2,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$Version,
+    [string]$FallbackSection = "",
     [string]$ChangelogPath = "",
     [Parameter(Mandatory = $true)]
     [string]$ChecksumPath,
@@ -21,41 +22,59 @@ if ([string]::IsNullOrWhiteSpace($ChangelogPath)) {
 }
 
 $lines = @(Get-Content -Path $ChangelogPath -Encoding utf8)
-$headingPattern = "^##\s+$([regex]::Escape($normalizedVersion))(?:\s+-.*)?$"
-$sectionStart = -1
-for ($index = 0; $index -lt $lines.Count; $index++) {
-    if ($lines[$index] -match $headingPattern) {
-        $sectionStart = $index + 1
-        break
-    }
+$sectionNames = @()
+if (![string]::IsNullOrWhiteSpace($FallbackSection)) {
+    $sectionNames += $FallbackSection.Trim()
 }
+$sectionNames += $normalizedVersion
 
-if ($sectionStart -lt 0) {
-    throw "CHANGELOG.md does not contain a section for version $normalizedVersion."
-}
-
-$sectionEnd = $lines.Count
-for ($index = $sectionStart; $index -lt $lines.Count; $index++) {
-    if ($lines[$index] -match "^##\s+") {
-        $sectionEnd = $index
-        break
-    }
-}
-
-$contentStart = $sectionStart
-while ($contentStart -lt $sectionEnd -and [string]::IsNullOrWhiteSpace($lines[$contentStart])) {
-    $contentStart++
-}
-$contentEnd = $sectionEnd - 1
-while ($contentEnd -ge $contentStart -and [string]::IsNullOrWhiteSpace($lines[$contentEnd])) {
-    $contentEnd--
-}
-if ($contentStart -gt $contentEnd) {
-    throw "The changelog section for version $normalizedVersion is empty."
-}
 $section = @()
-for ($index = $contentStart; $index -le $contentEnd; $index++) {
-    $section += $lines[$index]
+$selectedSection = ""
+foreach ($sectionName in $sectionNames) {
+    $headingPattern = "^##\s+$([regex]::Escape($sectionName))(?:\s+-.*)?$"
+    $sectionStart = -1
+    for ($index = 0; $index -lt $lines.Count; $index++) {
+        if ($lines[$index] -match $headingPattern) {
+            $sectionStart = $index + 1
+            break
+        }
+    }
+    if ($sectionStart -lt 0) {
+        continue
+    }
+
+    $sectionEnd = $lines.Count
+    for ($index = $sectionStart; $index -lt $lines.Count; $index++) {
+        if ($lines[$index] -match "^##\s+") {
+            $sectionEnd = $index
+            break
+        }
+    }
+
+    $contentStart = $sectionStart
+    while ($contentStart -lt $sectionEnd -and [string]::IsNullOrWhiteSpace($lines[$contentStart])) {
+        $contentStart++
+    }
+    $contentEnd = $sectionEnd - 1
+    while ($contentEnd -ge $contentStart -and [string]::IsNullOrWhiteSpace($lines[$contentEnd])) {
+        $contentEnd--
+    }
+    if ($contentStart -gt $contentEnd) {
+        continue
+    }
+
+    for ($index = $contentStart; $index -le $contentEnd; $index++) {
+        $section += $lines[$index]
+    }
+    $selectedSection = $sectionName
+    break
+}
+
+if ($section.Count -eq 0) {
+    if ([string]::IsNullOrWhiteSpace($FallbackSection)) {
+        throw "CHANGELOG.md does not contain a non-empty section for version $normalizedVersion."
+    }
+    throw "CHANGELOG.md does not contain a non-empty section for $FallbackSection or version $normalizedVersion."
 }
 
 $checksumLine = (Get-Content -Path $ChecksumPath -Encoding ascii | Select-Object -First 1).Trim()
@@ -83,4 +102,4 @@ if (![string]::IsNullOrWhiteSpace($outputDirectory)) {
     New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
 }
 Set-Content -Path $OutputPath -Value $notes -Encoding utf8
-Write-Host "Created $OutputPath"
+Write-Host "Created $OutputPath from changelog section $selectedSection"
