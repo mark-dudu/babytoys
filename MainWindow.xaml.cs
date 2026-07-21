@@ -102,7 +102,7 @@ public partial class MainWindow : Window
             startWithWindows = _settings.StartWithWindows;
             StartWithWindowsCheckBox.IsChecked = startWithWindows;
         }
-        else if (startWithWindows != _startupService.IsEnabled() && !_startupService.TrySetEnabled(startWithWindows))
+        else if (!_startupService.MatchesDesiredState(startWithWindows) && !_startupService.TrySetEnabled(startWithWindows))
         {
             startWithWindows = _settings.StartWithWindows;
             StartWithWindowsCheckBox.IsChecked = startWithWindows;
@@ -121,7 +121,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_settings.StartWithWindows == _startupService.IsEnabled())
+        if (_startupService.MatchesDesiredState(_settings.StartWithWindows))
         {
             return;
         }

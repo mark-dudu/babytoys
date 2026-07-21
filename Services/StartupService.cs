@@ -7,12 +7,16 @@ public sealed class StartupService
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "BabyToys";
 
-    public bool IsEnabled()
+    public bool MatchesDesiredState(bool enabled)
     {
         try
         {
             using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: false);
-            return key?.GetValue(ValueName) is string value && !string.IsNullOrWhiteSpace(value);
+            var registeredCommand = key?.GetValue(ValueName) as string;
+            return StartupRegistrationPolicy.MatchesDesiredState(
+                registeredCommand,
+                Environment.ProcessPath,
+                enabled);
         }
         catch (Exception ex)
         {
@@ -25,12 +29,6 @@ public sealed class StartupService
     {
         try
         {
-            using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: true);
-            if (key is null)
-            {
-                return false;
-            }
-
             if (enabled)
             {
                 var executablePath = Environment.ProcessPath;
@@ -39,10 +37,22 @@ public sealed class StartupService
                     return false;
                 }
 
-                key.SetValue(ValueName, $"\"{executablePath}\" --minimized");
+                using var key = Registry.CurrentUser.CreateSubKey(RunKeyPath, writable: true);
+                if (key is null)
+                {
+                    return false;
+                }
+
+                key.SetValue(ValueName, StartupRegistrationPolicy.BuildCommand(executablePath));
             }
             else
             {
+                using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: true);
+                if (key is null)
+                {
+                    return true;
+                }
+
                 key.DeleteValue(ValueName, throwOnMissingValue: false);
             }
 
