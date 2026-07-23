@@ -1,7 +1,5 @@
 using System.ComponentModel;
 using System.Windows;
-using System.Windows.Input;
-using System.Windows.Threading;
 using BabyToys.Models;
 using BabyToys.Services;
 using BabyToys.Sessions;
@@ -17,9 +15,8 @@ public partial class MainWindow : Window
     private readonly GlobalHotKeyService _globalHotKeyService = new();
     private readonly TrayIconService _trayIconService = new();
     private readonly SessionRecoveryService _recoveryService = new();
-    private readonly DispatcherTimer _confirmTimer = new();
     private AppSettings _settings = new();
-    private int _confirmRemainingSeconds;
+    private EntryConfirmationSession? _entryConfirmationSession;
     private ChildLockSession? _session;
     private bool _allowClose;
     private bool _loadingPreset;
@@ -29,9 +26,6 @@ public partial class MainWindow : Window
         InitializeComponent();
         Icon = AppIconService.WindowIcon;
         VersionTextBlock.Text = $"v{typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "未知"}";
-
-        _confirmTimer.Interval = TimeSpan.FromSeconds(1);
-        _confirmTimer.Tick += ConfirmTimer_Tick;
 
         _trayIconService.ShowRequested += (_, _) => Dispatcher.Invoke(ShowMainWindow);
         _trayIconService.StartRequested += (_, _) => Dispatcher.Invoke(StartFromShortcut);
@@ -58,7 +52,6 @@ public partial class MainWindow : Window
                 Hide();
             }
         };
-        PreviewKeyDown += MainWindow_PreviewKeyDown;
     }
 
     private void LoadSettings()
@@ -192,8 +185,10 @@ public partial class MainWindow : Window
 
     private void StartButton_Click(object sender, RoutedEventArgs e)
     {
-        SaveSettingsFromUi();
-        BeginConfirmCountdown();
+        if (BeginConfirmCountdown())
+        {
+            SaveSettingsFromUi();
+        }
     }
 
     private void CheckPreviousSessionRecovery()
@@ -224,16 +219,16 @@ public partial class MainWindow : Window
 
     private void StartFromShortcut()
     {
-        if (_session is not null || _confirmTimer.IsEnabled)
+        if (_session is not null || _entryConfirmationSession is not null)
         {
-            ShowMainWindow();
             StatusTextBlock.Text = "儿童模式已在启动或运行中";
             return;
         }
 
-        ShowMainWindow();
-        SaveSettingsFromUi();
-        BeginConfirmCountdown();
+        if (BeginConfirmCountdown())
+        {
+            SaveSettingsFromUi();
+        }
     }
 
     private void ShowMainWindow()
@@ -337,52 +332,72 @@ public partial class MainWindow : Window
         SaveSettingsFromUi();
     }
 
-    private void BeginConfirmCountdown()
+    private bool BeginConfirmCountdown()
     {
-        _confirmRemainingSeconds = 3;
         StartButton.IsEnabled = false;
-        CancelCountdownButton.Visibility = Visibility.Visible;
-        StatusTextBlock.Text = "3 秒后进入儿童模式，按 Esc 可取消";
-        _confirmTimer.Start();
-    }
+        StatusTextBlock.Text = "正在进入低刺激确认";
 
-    private void CancelCountdownButton_Click(object sender, RoutedEventArgs e)
-    {
-        CancelConfirmCountdown("已取消");
-    }
+        var confirmation = new EntryConfirmationSession();
+        confirmation.Confirmed += OnEntryConfirmationConfirmed;
+        confirmation.Canceled += OnEntryConfirmationCanceled;
+        _entryConfirmationSession = confirmation;
 
-    private void MainWindow_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        if (e.Key == Key.Escape && _confirmTimer.IsEnabled)
+        if (!confirmation.Start())
         {
-            CancelConfirmCountdown("已取消");
-            e.Handled = true;
+            ReleaseEntryConfirmation(confirmation);
+            StartButton.IsEnabled = true;
+            StatusTextBlock.Text = "无法覆盖全部屏幕，已取消进入儿童模式";
+            ShowMainWindow();
+            return false;
         }
+
+        Hide();
+        return true;
     }
 
-    private void ConfirmTimer_Tick(object? sender, EventArgs e)
+    private void OnEntryConfirmationCanceled(object? sender, EventArgs e)
     {
-        _confirmRemainingSeconds--;
-        if (_confirmRemainingSeconds <= 0)
+        if (sender is not EntryConfirmationSession confirmation ||
+            !ReferenceEquals(_entryConfirmationSession, confirmation))
         {
-            _confirmTimer.Stop();
-            CancelCountdownButton.Visibility = Visibility.Collapsed;
-            StartChildLockSession();
             return;
         }
 
-        StatusTextBlock.Text = $"{_confirmRemainingSeconds} 秒后进入儿童模式，按 Esc 可取消";
-    }
-
-    private void CancelConfirmCountdown(string status)
-    {
-        _confirmTimer.Stop();
+        ReleaseEntryConfirmation(confirmation);
         StartButton.IsEnabled = true;
-        CancelCountdownButton.Visibility = Visibility.Collapsed;
-        StatusTextBlock.Text = status;
+        StatusTextBlock.Text = "已取消";
+        ShowMainWindow();
     }
 
-    private void StartChildLockSession()
+    private void OnEntryConfirmationConfirmed(object? sender, EventArgs e)
+    {
+        if (sender is not EntryConfirmationSession confirmation ||
+            !ReferenceEquals(_entryConfirmationSession, confirmation))
+        {
+            return;
+        }
+
+        confirmation.PrepareForHandoff();
+        var started = TryStartChildLockSession();
+        ReleaseEntryConfirmation(confirmation);
+        if (!started)
+        {
+            ShowMainWindow();
+        }
+    }
+
+    private void ReleaseEntryConfirmation(EntryConfirmationSession confirmation)
+    {
+        confirmation.Confirmed -= OnEntryConfirmationConfirmed;
+        confirmation.Canceled -= OnEntryConfirmationCanceled;
+        confirmation.Dispose();
+        if (ReferenceEquals(_entryConfirmationSession, confirmation))
+        {
+            _entryConfirmationSession = null;
+        }
+    }
+
+    private bool TryStartChildLockSession()
     {
         var options = new ChildLockOptions
         {
@@ -405,14 +420,14 @@ public partial class MainWindow : Window
             Hide();
             StatusTextBlock.Text = "儿童模式运行中";
             AppLogService.Current.Info("Main window hidden while child lock runs.");
+            return true;
         }
-        else
-        {
-            _session.Dispose();
-            _session = null;
-            StartButton.IsEnabled = true;
-            StatusTextBlock.Text = "无法进入儿童模式";
-        }
+
+        _session.Dispose();
+        _session = null;
+        StartButton.IsEnabled = true;
+        StatusTextBlock.Text = "无法进入儿童模式";
+        return false;
     }
 
     private void OnSessionEnded(object? sender, EventArgs e)
@@ -438,7 +453,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        _confirmTimer.Stop();
+        _entryConfirmationSession?.Dispose();
+        _entryConfirmationSession = null;
         _session?.Dispose();
         SaveSettingsFromUi();
         _globalHotKeyService.Dispose();
